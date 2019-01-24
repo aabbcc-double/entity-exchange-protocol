@@ -59,7 +59,6 @@ Message structure can be represented like this: `COMMAND JSONDATA\END` where `CO
   
    | JSON field     | Type    | Mandatory   | Description |
    | ---            | ---     | ---         | ---         |
-   | **id**         | string  | required    | Id of the entity. Typically it's current timestamp in milliseconds |
    | **collection** | string  | required    | collection of the entity. |
    | **entity**     | object  | required    | Object to insert to       |
   
@@ -67,13 +66,33 @@ Message structure can be represented like this: `COMMAND JSONDATA\END` where `CO
 
    | JSON field     | Type    | Mandatory   | Description |
    | ---            | ---     | ---         | ---         |
-   | **id**         | string  | required    | Id of the entity |
+   | **filter**     | object  | required    | Delete all entities look like passed filter  |
 
- * EMODIFIED - Updates or creates enitity 
+ * EREPLACE - Updates or creates enitity 
 
    | JSON field     | Type    | Mandatory   | Description |
    | ---            | ---     | ---         | ---         |
-   | **id**         | string  | required    | Id of the entity |
+   | **filter**     | object  | required    | Filter to use |
    | **collection** | string  | required    | Collection to insert into |
    | **entity**     | object  | required    | Object to store |
 
+### 5. Data exchange
+##### 5.1 Local storage
+Both peers should store entities as array items where array is a named collection. When inserting new entity, peers must create a named 
+collection when necessary and append the entity. It's illegal to modify entity upon saving or reading without explicit request (by 
+consumer). Peers must save meta information within the entity. Required metadata fields at least: `lastLocalEditDate`, `lastRemoteEditDate`,
+`isDeleted`. Implementations are free to add additional fields to the metadata and update them at any time.
+
+##### 5.2 Data transfer
+First slave gets maximum of `lastRemoteEditDate` (next `RMAX`) from local entities from each collection, and collects all entities where 
+`lastLocalEditDate` exists and is greater than `RMAX` and starts to send to the master:
+ - if there is a `lastRemoteEditDate` and `isDeleted` true than the entity should be sent as `EDELETE`. Filtering and identifying the 
+entity is defined by consumer
+ - if there is a `lastRemoteEditDate`then entity should be sent as `EREPLACE` command. Filtering and identifying the entity is defined by 
+the consumer. 
+ - if there is not `lastRemoteEditDate` and `isDeleted` is false then entity should be sent as `EADD` command.
+ - if there is not `lastRemoteEditDate` and `isDeleted` true then then the entity should be deleted locally.
+
+Writing a command to stream of the socket can be treated as successful transfer. After each successful transfer the entity's 
+`lastRemoteEditDate` should be set to the entity's `lastLocalEditDate`.
+ 
